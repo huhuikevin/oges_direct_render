@@ -101,8 +101,8 @@ static native_window_priv *pnative;
 static int
 LoadNativeWindowPrivAPI(native_window_priv_api_t *native)
 {
-#if 0    
-    void *p_library = dlopen("libnativewin.so", RTLD_NOW);
+#if 0
+    void *p_library = dlopen("/data/app/com.example.native_activity-2/lib/arm/libnativewin.so", RTLD_NOW);
     if (!p_library)
     {
         LOGI("dlopen libnativewin.so failt, return \n");
@@ -135,20 +135,51 @@ LoadNativeWindowPrivAPI(native_window_priv_api_t *native)
         native->queue && native->cancel && native->setOrientation? 0 : -1;
 }
 
-
+static int loaded = 0;
+static void *pNativeBuffer[3];
 static void engine_surface_init(struct engine* engine)
 {
     int ret;
     void *pbuffer = NULL;
 
     LOGI("surface init\n");
-    if (LoadNativeWindowPrivAPI(&native_win_api) == -1){
+    if (!loaded && LoadNativeWindowPrivAPI(&native_win_api) == -1){
         LOGI("load function failt \n");
         return;
     }
+    loaded = 1;
     pnative = native_win_api.connect((ANativeWindow *)engine->app->window);
 
+    pbuffer = NULL;
     ret = native_win_api.dequeue(pnative, &pbuffer);
+    pNativeBuffer[0] = pbuffer;
+    ret = native_win_api.queue(pnative, pbuffer);
+    LOGI("dequeue=%d, pbuffer=%p\n", ret, pbuffer);
+
+    pbuffer = NULL;
+    ret = native_win_api.dequeue(pnative, &pbuffer);
+    pNativeBuffer[1] = pbuffer;
+    ret = native_win_api.queue(pnative, pbuffer);
+
+    LOGI("dequeue=%d, pbuffer=%p\n", ret, pbuffer);
+    pbuffer = NULL;
+    ret = native_win_api.dequeue(pnative, &pbuffer);
+    pNativeBuffer[2] = pbuffer;
+    ret = native_win_api.queue(pnative, pbuffer);
+
+    LOGI("dequeue=%d, pbuffer=%p\n", ret, pbuffer);  
+
+
+    //native_win_api.disconnect(pnative);  
+}
+
+
+static void engine_queue(void)
+{
+    void *pbuffer = NULL;
+    int ret;
+    ret = native_win_api.dequeue(pnative, &pbuffer);
+    ret = native_win_api.queue(pnative, pbuffer);
 
     LOGI("dequeue=%d, pbuffer=%p\n", ret, pbuffer);
 }
@@ -177,8 +208,7 @@ static int engine_init_display(struct engine* engine) {
     EGLSurface surface;
     EGLContext context;
 
-    engine_surface_init(engine);
-
+   
     EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
 
     eglInitialize(display, 0, 0);
@@ -219,10 +249,12 @@ static int engine_init_display(struct engine* engine) {
     glEnable(GL_CULL_FACE);
     glShadeModel(GL_SMOOTH);
     glDisable(GL_DEPTH_TEST);
-
+    engine_surface_init(engine);
+    LOGI("=============================\n");
     return 0;
 }
 
+static int _swap = 0;
 /**
  * Just the current frame in the display.
  */
@@ -236,8 +268,26 @@ static void engine_draw_frame(struct engine* engine) {
     glClearColor(((float)engine->state.x)/engine->width, engine->state.angle,
             ((float)engine->state.y)/engine->height, 1);
     glClear(GL_COLOR_BUFFER_BIT);
-
-    eglSwapBuffers(engine->display, engine->surface);
+    if (_swap == 0) {
+        eglSwapBuffers(engine->display, engine->surface);
+        _swap = 1;
+    }else if (_swap == 1){
+        int ret = 0;
+        int i = 0;
+        glFinish();
+        do {
+            ret = native_win_api.queue(pnative, pNativeBuffer[i]);
+            LOGI("=============%d---ret=%d========\n", i, ret);
+            if (ret == 0)
+                break;
+        }while(++i < 3);
+        //glFinish();      
+        _swap = 2;
+    }else if (_swap == 2){
+        glFinish();
+    }
+    //engine_surface_init(engine);
+    //LOGI("=============================\n");
 }
 
 /**

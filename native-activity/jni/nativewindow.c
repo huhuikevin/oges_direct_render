@@ -92,14 +92,14 @@ struct native_window_priv
 static int window_connect( ANativeWindow *anw )
 {
 #if ANDROID_ICS_OR_LATER
-    return native_window_api_connect( anw, NATIVE_WINDOW_API_MEDIA );
+    return 0;//native_window_api_connect( anw, NATIVE_WINDOW_API_MEDIA );
 #endif
 }
 
 static int window_disconnect( ANativeWindow *anw )
 {
 #if ANDROID_ICS_OR_LATER
-    return native_window_api_disconnect( anw, NATIVE_WINDOW_API_MEDIA );
+    return 0;//native_window_api_disconnect( anw, NATIVE_WINDOW_API_MEDIA );
 #endif
 }
 
@@ -272,6 +272,10 @@ static int dequeue_fence( native_window_priv *priv, void **pp_handle,
     if( p_fence_fd )
         *p_fence_fd = i_fence_fd;
     *pp_handle = anb;
+    if (anb){
+        LOGE("buffer handle = %p\n", anb->handle);
+
+    }
 
     return 0;
 }
