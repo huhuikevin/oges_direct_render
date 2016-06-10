@@ -184,6 +184,18 @@ static void engine_queue(void)
     LOGI("dequeue=%d, pbuffer=%p\n", ret, pbuffer);
 }
 
+static void engine_enqueue(void)
+{
+    int ret = 0;
+    int i = 0;
+    do {
+        ret = native_win_api.queue(pnative, pNativeBuffer[i]);
+        LOGI("=============%d---ret=%d========\n", i, ret);
+        if (ret == 0)
+            break;
+    }while(++i < 3);
+}
+
 /**
  * Initialize an EGL context for the current display.
  */
@@ -251,10 +263,13 @@ static int engine_init_display(struct engine* engine) {
     glDisable(GL_DEPTH_TEST);
     engine_surface_init(engine);
     LOGI("=============================\n");
+
+    //engine_enqueue();
     return 0;
 }
 
 static int _swap = 0;
+static int _frames = 0;
 /**
  * Just the current frame in the display.
  */
@@ -268,24 +283,39 @@ static void engine_draw_frame(struct engine* engine) {
     glClearColor(((float)engine->state.x)/engine->width, engine->state.angle,
             ((float)engine->state.y)/engine->height, 1);
     glClear(GL_COLOR_BUFFER_BIT);
+    glFinish();
+    if (_swap == 0){
+        engine_enqueue();
+        _swap = 1;
+    }
+    _frames ++;
+#if 0    
     if (_swap == 0) {
-        eglSwapBuffers(engine->display, engine->surface);
+        //eglSwapBuffers(engine->display, engine->surface);
         _swap = 1;
     }else if (_swap == 1){
         int ret = 0;
         int i = 0;
-        glFinish();
+        //glFinish();
         do {
             ret = native_win_api.queue(pnative, pNativeBuffer[i]);
             LOGI("=============%d---ret=%d========\n", i, ret);
             if (ret == 0)
                 break;
         }while(++i < 3);
-        //glFinish();      
+        glFinish();      
         _swap = 2;
     }else if (_swap == 2){
+        glFlush();
         glFinish();
+        _frames ++;
+        if (_frames && (_frames % 60 == 0))
+            LOGI("frames = %d\n", _frames);
     }
+#endif
+    engine->state.x ++;
+    engine->state.y ++;
+    LOGI("frames = %d\n", _frames);
     //engine_surface_init(engine);
     //LOGI("=============================\n");
 }
@@ -401,8 +431,11 @@ void android_main(struct android_app* state) {
     }
 
     // loop waiting for stuff to do.
-
+    //engine->animating = 1;
+    //engine->state.x =  121;//AMotionEvent_getX(event, 0);
+    //engine->state.y = 112;//AMotionEvent_getY(event, 0);
     while (1) {
+    #if 1    
         // Read all pending events.
         int ident;
         int events;
@@ -438,10 +471,10 @@ void android_main(struct android_app* state) {
                 return;
             }
         }
-
+    #endif
         if (engine.animating) {
             // Done with events; draw next animation frame.
-            engine.state.angle += .01f;
+            engine.state.angle += .3f;
             if (engine.state.angle > 1) {
                 engine.state.angle = 0;
             }
@@ -449,6 +482,7 @@ void android_main(struct android_app* state) {
             // Drawing is throttled to the screen update rate, so there
             // is no need to do timing here.
             engine_draw_frame(&engine);
+            usleep(500*1000);
         }
     }
 }
